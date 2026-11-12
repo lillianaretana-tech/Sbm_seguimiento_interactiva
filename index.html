@@ -9,4 +9,60 @@
 <p class="note">🔒 Los datos se guardan únicamente en este navegador y dispositivo (almacenamiento local). No se envían a ningún servidor. Para no perderlos si cambias de teléfono, computadora o navegador, utiliza «Respaldar JSON» periódicamente. Las marcas son independientes por año y trimestre.</p><footer>Control personal de auditorías · Cada casilla registra automáticamente la fecha y hora al marcarla. Toca una casilla marcada para deshacerla.</footer></main>
 <script>
 (()=>{'use strict';const KEY='lillytech_auditorias_v1';let data;try{data=JSON.parse(localStorage.getItem(KEY))||{people:[]}}catch{data={people:[]}}if(!Array.isArray(data.people))data={people:[]};const $=id=>document.getElementById(id);$('year').value=new Date().getFullYear();$('quarter').value=String(Math.floor(new Date().getMonth()/3)+1);const save=()=>{try{localStorage.setItem(KEY,JSON.stringify(data))}catch(e){alert('No se pudo guardar en este navegador. Descarga un respaldo JSON.')}};const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));const year=()=>String($('year').value||new Date().getFullYear());const entry=(p,q)=>p.audits?.[year()]?.[q]||null;const list=()=>{let all=data.people.slice();const projects=[...new Set(data.people.map(p=>p.project).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es'));const current=$('filter').value;$('filter').innerHTML='<option value="">Todos los proyectos</option>'+projects.map(p=>`<option value="${esc(p)}">${esc(p)}</option>`).join('');$('filter').value=projects.includes(current)?current:'';return all.filter(p=>(!$('filter').value||p.project===$('filter').value)&&p.name.toLocaleLowerCase().includes($('search').value.toLocaleLowerCase())&&(!$('status').value||($('status').value==='done'?!!entry(p,$('quarter').value):!entry(p,$('quarter').value)))).sort((a,b)=>a.project.localeCompare(b.project,'es')||a.name.localeCompare(b.name,'es'))};function render(){const people=list(),q=$('quarter').value,done=people.filter(p=>entry(p,q)).length;$('total').textContent=people.length;$('done').textContent=done;$('pending').textContent=people.length-done;$('progress').textContent=`Cumplimiento del trimestre seleccionado: ${people.length?Math.round(done/people.length*100):0}%`;$('rows').innerHTML=people.length?people.map(p=>`<tr><td><b>${esc(p.name)}</b></td><td><span class="tag">${esc(p.project)}</span></td>${[1,2,3,4].map(i=>{const date=entry(p,String(i));return `<td class="center"><input type="checkbox" data-id="${esc(p.id)}" data-q="${i}" ${date?'checked':''} title="${date?'Realizada: '+esc(new Date(date).toLocaleString('es-CR')):'Pendiente'}" aria-label="Auditoría ${i} de ${esc(p.name)}"></td>`}).join('')}<td><div class="actions"><button class="secondary" data-edit="${esc(p.id)}">Editar</button><button class="danger" data-delete="${esc(p.id)}">Eliminar</button></div></td></tr>`).join(''):'<tr><td colspan="7" class="empty">No hay funcionarios para mostrar. Agrega uno o importa tu lista.</td></tr>'}function add(name,project){name=name.trim();project=project.trim();if(!name||!project)return false;if(data.people.some(p=>p.name.toLocaleLowerCase()===name.toLocaleLowerCase()&&p.project.toLocaleLowerCase()===project.toLocaleLowerCase()))return false;data.people.push({id:crypto.randomUUID?crypto.randomUUID():String(Date.now())+Math.random(),name,project,audits:{}});return true}$('add').onclick=()=>{if(add($('name').value,$('project').value)){save();$('name').value='';$('name').focus();render()}else alert('Escribe nombre y proyecto. Si ya existe esa combinación, no se duplicará.')};$('rows').addEventListener('change',e=>{const el=e.target;if(!el.matches('input[type=checkbox]'))return;const p=data.people.find(x=>x.id===el.dataset.id);if(!p)return;p.audits??={};p.audits[year()]??={};if(el.checked)p.audits[year()][el.dataset.q]=new Date().toISOString();else delete p.audits[year()][el.dataset.q];save();render()});$('rows').addEventListener('click',e=>{const btn=e.target.closest('button');if(!btn)return;const id=btn.dataset.edit||btn.dataset.delete,p=data.people.find(x=>x.id===id);if(!p)return;if(btn.dataset.delete){if(confirm(`¿Eliminar a ${p.name} y todo su historial de auditorías?`)){data.people=data.people.filter(x=>x.id!==id);save();render()}}else{const n=prompt('Nombre del funcionario:',p.name);if(n===null)return;const pr=prompt('Proyecto:',p.project);if(pr===null)return;if(!n.trim()||!pr.trim())return alert('Nombre y proyecto son obligatorios.');p.name=n.trim();p.project=pr.trim();save();render()}});['filter','search','status','quarter','year'].forEach(id=>$(id).addEventListener(id==='search'?'input':'change',render));function download(name,content,type){const a=document.createElement('a'),url=URL.createObjectURL(new Blob([content],{type}));a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000)}const csvCell=s=>'"'+String(s??'').replace(/"/g,'""')+'"';$('export').onclick=()=>{const lines=[['Nombre','Proyecto','Año','T1 fecha','T2 fecha','T3 fecha','T4 fecha'],...data.people.map(p=>[p.name,p.project,year(),...[1,2,3,4].map(q=>{const x=entry(p,String(q));return x?new Date(x).toLocaleString('es-CR'):''})])];download('auditorias_'+year()+'.csv','\ufeff'+lines.map(r=>r.map(csvCell).join(';')).join('\r\n'),'text/csv;charset=utf-8')};$('backup').onclick=()=>download('respaldo_auditorias.json',JSON.stringify(data,null,2),'application/json');$('restore').onclick=()=>$('backupfile').click();$('backupfile').onchange=async e=>{const f=e.target.files[0];if(!f)return;try{const x=JSON.parse(await f.text());if(!Array.isArray(x.people)||!x.people.every(p=>typeof p.name==='string'&&typeof p.project==='string'))throw Error('Formato inválido');if(!confirm('¿Reemplazar todos los datos actuales por este respaldo?'))return;data=x;save();render()}catch(err){alert('No se pudo restaurar: '+err.message)}finally{e.target.value=''}};function parseCSV(text){text=text.replace(/^\ufeff/,'');const first=text.split(/\r?\n/)[0]||'';const sep=(first.match(/;/g)||[]).length>(first.match(/,/g)||[]).length?';':',';let rows=[],row=[],cell='',quoted=false;for(let i=0;i<text.length;i++){const c=text[i];if(c==='"'){if(quoted&&text[i+1]==='"'){cell+='"';i++}else quoted=!quoted}else if(c===sep&&!quoted){row.push(cell);cell=''}else if((c==='\n'||c==='\r')&&!quoted){if(c==='\r'&&text[i+1]==='\n')i++;row.push(cell);if(row.some(x=>x.trim()))rows.push(row);row=[];cell=''}else cell+=c}row.push(cell);if(row.some(x=>x.trim()))rows.push(row);return rows}$('import').onclick=()=>$('file').click();$('file').onchange=async e=>{const f=e.target.files[0];if(!f)return;try{const rows=parseCSV(await f.text());if(!rows.length)throw Error('Archivo vacío');const header=rows[0].map(s=>s.trim().toLowerCase());const ni=header.findIndex(s=>['nombre','funcionario','nombre completo'].includes(s)),pi=header.findIndex(s=>['proyecto','site','sitio'].includes(s));if(ni<0||pi<0)throw Error('Se requieren columnas nombre y proyecto');let count=0;for(const r of rows.slice(1))if(add(r[ni]||'',r[pi]||''))count++;save();render();alert(`${count} funcionarios importados. Los duplicados se omitieron.`)}catch(err){alert('Error al importar: '+err.message)}finally{e.target.value=''}};render()})();
+</script><script>
+const endpoint='https://ihajshxnmakyobcubqlq.supabase.co';
+const publicKey='sb_publishable_c4A_lPxTe0FCm_KoChNIGQ_yMlt6lV5';
+let token=null;
+async function request(path,method='GET',body){
+ const response=await fetch(endpoint+path,{method,headers:{apikey:publicKey,Authorization:'Bearer '+token.access_token,'Content-Type':'application/json',Prefer:'return=representation'},body:body?JSON.stringify(body):undefined});
+ if(!response.ok)throw Error('Error de acceso o permisos: '+response.status);
+ return response.json();
+}
+async function showPeople(){
+ const people=await request('/rest/v1/rpc/auditorias_listado_funcionarios','POST',{});
+ document.getElementById('syncstatus').textContent='Funcionarios cargados: '+people.length;
+ document.getElementById('manual').hidden=true;
+ document.getElementById('login').hidden=true;
+ document.getElementById('logout').hidden=false;
+ document.getElementById('email').hidden=true;
+ document.getElementById('password').hidden=true;
+ const tbody=document.getElementById('rows');tbody.replaceChildren();
+ const years=Number(document.getElementById('year').value);
+ const marks=await request('/rest/v1/lillytech_auditorias_trimestrales?select=*&anio=eq.'+years);
+ const projects=[...new Set(people.map(p=>p.proyecto))].sort();
+ const filter=document.getElementById('filter');filter.replaceChildren(new Option('Todos los proyectos',''),...projects.map(p=>new Option(p,p)));
+ function draw(){
+  tbody.replaceChildren();
+  const q=Number(document.getElementById('quarter').value),term=document.getElementById('search').value.toLowerCase(),state=document.getElementById('status').value;
+  let visible=people.filter(p=>!filter.value||p.proyecto===filter.value).filter(p=>p.nombre.toLowerCase().includes(term)).filter(p=>{let found=marks.some(m=>m.funcionario_clave===p.proyecto+'|'+p.nombre&&m.trimestre===q);return !state||(state==='done'?found:!found)});
+  let done=0;
+  for(const p of visible){
+   const tr=document.createElement('tr');for(const value of [p.nombre,p.proyecto]){let td=document.createElement('td');td.textContent=value;tr.append(td)}
+   for(let quarter=1;quarter<=4;quarter++){
+    let td=document.createElement('td');td.className='center';let input=document.createElement('input');input.type='checkbox';
+    const key=p.proyecto+'|'+p.nombre;input.checked=marks.some(m=>m.funcionario_clave===key&&m.trimestre===quarter);if(quarter===q&&input.checked)done++;
+    input.onchange=async()=>{input.disabled=true;try{
+      if(input.checked){const added=await request('/rest/v1/lillytech_auditorias_trimestrales','POST',{propietario:token.user.id,funcionario_clave:key,anio:years,trimestre:quarter,fecha_realizacion:new Date().toISOString().slice(0,10)});marks.push(...added)}
+      else{await request('/rest/v1/lillytech_auditorias_trimestrales?funcionario_clave=eq.'+encodeURIComponent(key)+'&anio=eq.'+years+'&trimestre=eq.'+quarter,'DELETE');let index=marks.findIndex(m=>m.funcionario_clave===key&&m.trimestre===quarter);if(index>=0)marks.splice(index,1)}
+      draw();
+    }catch(error){input.checked=!input.checked;alert(error.message)}finally{input.disabled=false}};
+    td.append(input);tr.append(td);
+   }
+   tr.append(document.createElement('td'));tbody.append(tr);
+  }
+  document.getElementById('total').textContent=visible.length;document.getElementById('done').textContent=done;document.getElementById('pending').textContent=visible.length-done;document.getElementById('progress').textContent='Cumplimiento: '+(visible.length?Math.round(done*100/visible.length):0)+'%';
+ }
+ for(const id of ['filter','search','status','quarter'])document.getElementById(id).addEventListener(id==='search'?'input':'change',draw);
+ document.getElementById('year').onchange=showPeople;draw();
+}
+document.getElementById('login').onclick=async()=>{
+ try{
+ const r=await fetch(endpoint+'/auth/v1/token?grant_type=password',{method:'POST',headers:{apikey:publicKey,'Content-Type':'application/json'},body:JSON.stringify({email:document.getElementById('email').value,password:document.getElementById('password').value})});
+ if(!r.ok)throw Error('Revisa tu correo y contraseña');
+ token=await r.json();sessionStorage.setItem('auditorias_session',JSON.stringify(token));await showPeople();
+ }catch(e){document.getElementById('syncstatus').textContent=e.message}
+};
+document.getElementById('logout').onclick=()=>{sessionStorage.removeItem('auditorias_session');location.reload()};
+try{token=JSON.parse(sessionStorage.getItem('auditorias_session'))}catch(e){}
+if(token)showPeople().catch(e=>document.getElementById('syncstatus').textContent=e.message);
 </script></body></html>
